@@ -24,29 +24,18 @@ var/
 .installed.cfg
 *.egg
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Ignore config.json if it contains secrets; otherwise, track it
+#config.json
+# Always track package.json (do NOT ignore)
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
-# VS Code settings
-.vscode/
-
-# Pytest cache
-.pytest_cache/
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-
-# Coverage reports
+# Unit test / coverage reports
 htmlcov/
 .tox/
+.nox/
 .coverage
 .coverage.*
 .cache
@@ -54,9 +43,28 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+.pytest_cache/
 
-# Logs
-*.log
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# VS Code
+.vscode/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Local envs
+.venv/
+venv/
+ENV/
 
 # MacOS
 .DS_Store
@@ -65,9 +73,52 @@ coverage.xml
 Thumbs.db
 Desktop.ini
 
-# dotenv environment variables
-.env
-.env.*
+# Logs
+*.log
 
-# Ollama models
-ollama/
+# FastAPI/Starlette
+instance/
+
+# React/Node
+node_modules/
+build/
+app_ui/node_modules/
+app_ui/build/
+
+# Artifacts
+*.pkl
+*.joblib
+*.h5
+*.model
+*.sav
+*.npy
+*.npz
+
+# Notebook artifacts
+*.nbconvert.ipynb
+
+# Ignore all files in the notebooks folder (remove this if you want to track some notebooks)
+notebooks/
+
+# User data and generated artifacts
+datasets/
+artifacts/
+
+# Downloads
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.zip
+*.tar.gz
+*.tar
+
+# Misc
+*.swp
+*.bak
+*.tmp
+
+# Ignore generated notebooks
+ml_notebook_*.ipynb

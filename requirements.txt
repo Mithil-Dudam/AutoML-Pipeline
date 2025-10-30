@@ -1,2 +1,9 @@
-langchain-ollama
-langgraph
+fastapi
+uvicorn
+pandas
+python-multipart
+nbformat
+nbclient
+ipykernel
+numpy
+scikit-learn
