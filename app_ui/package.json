@@ -1,7 +1,7 @@
 {
-  "name": "automl-pipeline",
+  "name": "app_ui",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,6 +14,7 @@
     "axios": "^1.13.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.9.4",
     "tailwindcss": "^4.1.16"
   },

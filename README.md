@@ -36,6 +36,19 @@ An automated machine learning pipeline generator that creates complete, executab
 - **Download Notebooks**: Fully executable `.ipynb` files for further customization
 - **Reproducible**: All notebooks are self-contained and portable
 
+### 🤖 AI-Powered Analysis Report
+
+- **LLM-Generated Insights**: Get expert-level analysis of your ML pipeline results using Llama 3.2
+- **Comprehensive Reports**: Automatically generated reports with:
+  - Executive Summary
+  - Data Quality Assessment
+  - Model Performance Analysis
+  - Key Findings & Insights
+  - Actionable Recommendations
+  - Deployment Readiness Assessment
+- **Plain English Explanations**: Non-technical users can understand model performance
+- **Local & Private**: Uses Ollama for privacy-preserving AI analysis
+
 ### 🔮 Prediction API
 
 - **REST API**: Make predictions on new data using your trained model
@@ -55,6 +68,9 @@ An automated machine learning pipeline generator that creates complete, executab
 - Python 3.8+
 - Node.js 16+
 - npm or yarn
+- **Ollama** (for AI report generation)
+  - Download from: [https://ollama.ai](https://ollama.ai)
+  - Install the `llama3.2` model: `ollama pull llama3.2`
 
 ### Installation
 
@@ -90,14 +106,21 @@ npm install
 
 ### Running the Application
 
-1. **Start the backend server**
+1. **Start Ollama** (for AI report generation)
+
+```bash
+# Make sure Ollama is running in the background
+ollama serve
+```
+
+2. **Start the backend server**
 
 ```bash
 # From the root directory
 uvicorn main:app --reload --port 8000
 ```
 
-2. **Start the frontend development server**
+3. **Start the frontend development server**
 
 ```bash
 # In a new terminal, from app_ui directory
@@ -105,7 +128,7 @@ cd app_ui
 npm run dev
 ```
 
-3. **Open your browser**
+4. **Open your browser**
 
 ```
 http://localhost:5173
@@ -129,13 +152,23 @@ http://localhost:5173
 - Watch in real-time as the notebook is created and executed
 - See results streaming live for each cell
 
-### Step 4: Download & Use
+### Step 4: Get AI Analysis Report
+
+- Click "Generate AI Report" button
+- LLM (Llama 3.2) analyzes your results in real-time
+- Get expert insights on:
+  - Data quality
+  - Model performance
+  - Overfitting/underfitting detection
+  - Actionable recommendations
+
+### Step 5: Download & Use
 
 - **Download Model**: Get your trained model (`.pkl`)
 - **Download Scaler**: Get preprocessing artifacts
 - **Download Notebook**: Get the full Jupyter notebook
 
-### Step 5: Make Predictions (Optional)
+### Step 6: Make Predictions (Optional)
 
 - Use the test section to make predictions on new data
 - Enter feature values in JSON format
@@ -183,6 +216,10 @@ AutoML-Pipeline/
 - `GET /download/scaler/{session_id}` - Download scaler/preprocessors
 - `POST /predict/{session_id}` - Make predictions with trained model
 
+### AI Analysis
+
+- `GET /generate/report/{session_id}` - Generate AI-powered analysis report using LLM
+
 ### Session Management
 
 - `GET /sessions` - List all active sessions
@@ -200,6 +237,7 @@ AutoML-Pipeline/
 - **LightGBM**: Gradient boosting framework
 - **NBFormat**: Jupyter notebook format handling
 - **NBClient**: Jupyter notebook execution
+- **LangChain + Ollama**: LLM integration for AI-powered analysis reports
 
 ### Frontend
 

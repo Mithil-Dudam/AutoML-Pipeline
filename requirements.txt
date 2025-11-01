@@ -7,3 +7,4 @@ nbclient
 ipykernel
 numpy
 scikit-learn
+langchain-ollama
