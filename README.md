@@ -2,10 +2,12 @@
 
 An automated machine learning pipeline generator that creates complete, executable Jupyter notebooks from your dataset with just a few clicks. No coding required!
 
+[![Status](https://img.shields.io/badge/Status-Production_Ready-success?style=for-the-badge)](https://github.com/Mithil-Dudam/AutoML-Pipeline)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
 ## 🌟 Features
 
@@ -52,27 +54,55 @@ An automated machine learning pipeline generator that creates complete, executab
 ### 🔮 Prediction API
 
 - **REST API**: Make predictions on new data using your trained model
+- **Smart Input Validation**: Validates data types, ranges, and missing columns
 - **Automatic Preprocessing**: Input data is transformed using saved scalers/vectorizers
+- **Categorical Dropdowns**: Frontend automatically shows dropdowns for categorical features
 - **JSON Interface**: Easy integration with any application
 
 ### 🧹 Session Management
 
+- **Redis-Based Sessions**: Persistent session storage with 2-hour TTL
 - **Multi-Session Support**: Handle multiple datasets simultaneously
-- **Automatic Cleanup**: Remove old sessions and artifacts
-- **Session Tracking**: Monitor all active sessions
+- **Automatic Cleanup**: Background task removes expired sessions and orphaned files every 10 minutes
+- **Session Tracking**: Monitor all active sessions with detailed stats
+
+### 🔒 Production Features
+
+- **Rate Limiting**: Configurable rate limiting (100 req/min default) to prevent API abuse
+- **Smart File Validation**:
+  - Automatic encoding detection (UTF-8, Latin-1, CP1252, ISO-8859-1)
+  - Automatic delimiter detection (comma, semicolon, tab)
+  - Better error messages for malformed files
+- **Structured Logging**:
+  - Request ID tracking for debugging
+  - JSON-formatted logs with timestamps
+  - Console output (captured by Docker)
+- **Input Validation**: Comprehensive Pydantic-based validation for predictions
+  - Type checking for all input fields
+  - Range validation for numeric values (3σ from training mean)
+  - Missing/extra column detection
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.8+
-- Node.js 16+
+- **Docker & Docker Compose** (Recommended)
+  - Docker Desktop for Windows/Mac
+  - Docker Engine + Docker Compose for Linux
+
+**OR** for manual installation:
+
+- Python 3.11+
+- Node.js 18+
 - npm or yarn
+- **Redis 7+** (for session management)
 - **Ollama** (for AI report generation)
   - Download from: [https://ollama.ai](https://ollama.ai)
   - Install the `llama3.2` model: `ollama pull llama3.2`
 
 ### Installation
+
+#### Option 1: Docker (Recommended) 🐳
 
 1. **Clone the repository**
 
@@ -81,7 +111,60 @@ git clone https://github.com/Mithil-Dudam/AutoML-Pipeline.git
 cd AutoML-Pipeline
 ```
 
-2. **Set up Python backend**
+2. **Configure environment variables** (optional)
+
+```bash
+# Create .env file with your settings (see Configuration section below)
+# Default settings work out of the box
+```
+
+3. **Start all services**
+
+```bash
+# Build and start all containers (Redis, Ollama, Backend, Frontend)
+docker compose up --build
+
+# Or run in detached mode
+docker compose up -d
+```
+
+4. **Access the application**
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000`
+- API Docs: `http://localhost:8000/docs`
+
+5. **Stop the application**
+
+```bash
+docker compose down
+```
+
+#### Option 2: Manual Installation
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/Mithil-Dudam/AutoML-Pipeline.git
+cd AutoML-Pipeline
+```
+
+2. **Install and start Redis**
+
+```bash
+# Windows (using Chocolatey)
+choco install redis
+
+# Mac
+brew install redis
+brew services start redis
+
+# Linux (Ubuntu/Debian)
+sudo apt-get install redis-server
+sudo systemctl start redis
+```
+
+3. **Set up Python backend**
 
 ```bash
 # Create virtual environment
@@ -97,30 +180,42 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. **Set up React frontend**
+4. **Set up React frontend**
 
 ```bash
 cd app_ui
 npm install
+cd ..
 ```
 
-### Running the Application
-
-1. **Start Ollama** (for AI report generation)
+5. **Configure environment variables**
 
 ```bash
-# Make sure Ollama is running in the background
+# Create .env file with your settings (see Configuration section below)
+# For local development, use these values:
+# REDIS_HOST=localhost
+# REDIS_PORT=6379
+```
+
+6. **Start Ollama** (for AI report generation)
+
+```bash
+# Download and install from https://ollama.ai
+# Then pull the model
+ollama pull llama3.2
+
+# Start Ollama service
 ollama serve
 ```
 
-2. **Start the backend server**
+7. **Start the backend server**
 
 ```bash
 # From the root directory
 uvicorn main:app --reload --port 8000
 ```
 
-3. **Start the frontend development server**
+8. **Start the frontend development server**
 
 ```bash
 # In a new terminal, from app_ui directory
@@ -128,11 +223,25 @@ cd app_ui
 npm run dev
 ```
 
-4. **Open your browser**
+9. **Open your browser**
 
 ```
 http://localhost:5173
 ```
+
+## ⚙️ Configuration
+
+### Environment Variables (Optional)
+
+Create a `.env` file in the root directory if you need to customize Redis settings:
+
+```env
+# Redis configuration
+REDIS_HOST=redis                # Use "redis" for Docker, "localhost" for local
+REDIS_PORT=6379                 # Default Redis port
+```
+
+**Note:** The application works out-of-the-box with default settings. You only need a `.env` file if you're running Redis on a different host/port.
 
 ## 📖 Usage Guide
 
@@ -144,7 +253,19 @@ http://localhost:5173
 ### Step 2: Configure
 
 - **Select Target Column**: Choose which column you want to predict
-- **Select Model**: Pick from 15+ classification or regression algorithms
+  - Automatic detection of useless columns (IDs, emails, URLs, phone numbers, names, hashes)
+  - Smart warnings for class imbalance, binary transformation opportunities, etc.
+  - Recommended strategies for handling imbalanced datasets
+- **Review Columns**: Review and exclude columns before training
+  - See data types, unique values, and sample data
+  - Auto-excluded columns are highlighted with reasons
+- **Select Model**: Pick from 19+ classification or regression algorithms
+- **Handle Class Imbalance** (if detected):
+  - Random Undersampling
+  - Random Oversampling
+  - SMOTE (Synthetic Minority Over-sampling)
+  - Combined (SMOTE + Undersampling)
+  - No resampling
 
 ### Step 3: Generate & Execute
 
@@ -171,39 +292,28 @@ http://localhost:5173
 ### Step 6: Make Predictions (Optional)
 
 - Use the test section to make predictions on new data
-- Enter feature values in JSON format
+- **Categorical columns** show as dropdowns with valid values
+- **Numeric columns** show as text inputs with validation
+- Smart validation checks:
+  - Missing/extra columns
+  - Data type validation
+  - Range validation (values within 3σ of training data)
 - Get instant predictions from your trained model
-
-## 🏗️ Project Structure
-
-```
-AutoML-Pipeline/
-├── main.py                 # FastAPI backend
-├── requirements.txt        # Python dependencies
-├── .gitignore             # Git ignore rules
-├── dataset/               # Uploaded datasets (gitignored)
-├── notebooks/             # Generated notebooks (gitignored)
-├── artifacts/             # Models, scalers (gitignored)
-└── app_ui/                # React frontend
-    ├── src/
-    │   ├── pages/
-    │   │   ├── Home.tsx        # Upload & configuration page
-    │   │   ├── Results.tsx     # Notebook execution & results
-    │   │   └── PageNotFound.tsx
-    │   ├── Api.tsx             # API client
-    │   ├── App.tsx             # Main app component
-    │   └── main.tsx            # Entry point
-    ├── package.json
-    └── vite.config.ts
-```
 
 ## 🛠️ API Endpoints
 
+### System Endpoints
+
+- `GET /health` - Health check endpoint
+
 ### Dataset Management
 
-- `POST /dataset` - Upload a CSV dataset
+- `POST /dataset` - Upload a CSV dataset (with smart encoding/delimiter detection)
 - `POST /target-column` - Set target column for prediction
 - `POST /model` - Select ML model
+- `POST /imbalance-strategy` - Set class imbalance handling strategy
+- `GET /column-info/{session_id}` - Get column information for review
+- `POST /exclude-columns` - Exclude specific columns from training
 
 ### Notebook Operations
 
@@ -214,15 +324,19 @@ AutoML-Pipeline/
 
 - `GET /download/model/{session_id}` - Download trained model
 - `GET /download/scaler/{session_id}` - Download scaler/preprocessors
-- `POST /predict/{session_id}` - Make predictions with trained model
+- `POST /predict/{session_id}` - Make predictions with trained model (with validation)
+- `GET /input-columns/{session_id}` - Get expected input columns for predictions
+- `GET /categorical-values/{session_id}` - Get valid categorical values for dropdowns
 
 ### AI Analysis
 
-- `GET /generate/report/{session_id}` - Generate AI-powered analysis report using LLM
+- `POST /generate/report/{session_id}` - Start AI-powered analysis report generation
+- `GET /report/status/{session_id}` - Check report generation status
+- `GET /report/stream/{session_id}` - Stream report generation progress (SSE)
 
 ### Session Management
 
-- `GET /sessions` - List all active sessions
+- `GET /sessions` - List all active sessions with details
 - `DELETE /cleanup/{session_id}` - Clean up specific session
 - `DELETE /cleanup/all` - Clean up all sessions
 
@@ -231,6 +345,7 @@ AutoML-Pipeline/
 ### Backend
 
 - **FastAPI**: Modern, fast web framework for building APIs
+- **Redis**: In-memory database for session management
 - **Pandas**: Data manipulation and analysis
 - **Scikit-learn**: Machine learning algorithms and tools
 - **XGBoost**: Gradient boosting framework
@@ -238,6 +353,9 @@ AutoML-Pipeline/
 - **NBFormat**: Jupyter notebook format handling
 - **NBClient**: Jupyter notebook execution
 - **LangChain + Ollama**: LLM integration for AI-powered analysis reports
+- **Pydantic**: Data validation and settings management
+- **SlowAPI**: Rate limiting middleware
+- **Chardet**: Character encoding detection
 
 ### Frontend
 
@@ -245,6 +363,13 @@ AutoML-Pipeline/
 - **TypeScript**: Type-safe JavaScript
 - **Vite**: Fast build tool and dev server
 - **React Router**: Client-side routing
+- **Axios**: HTTP client for API requests
+
+### Infrastructure
+
+- **Docker**: Containerization
+- **Docker Compose**: Multi-container orchestration
+- **Nginx**: Frontend web server (in production container)
 
 ## 📊 Supported Algorithms
 

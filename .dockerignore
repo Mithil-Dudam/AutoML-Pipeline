@@ -1,0 +1,75 @@
+# Git
+
+.git
+.gitignore
+
+# Python
+
+**pycache**/
+_.py[cod]
+_$py.class
+_.so
+.venv/
+venv/
+ENV/
+.Python
+_.egg-info/
+
+# IDEs
+
+.vscode/
+.idea/
+_.swp
+_.swa
+
+# OS
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+
+\*.log
+
+# Test/Coverage
+
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation
+
+\*.md
+docs/
+
+# Frontend (not needed in backend container)
+
+app_ui/
+
+# Artifacts (mounted as volumes)
+
+artifacts/
+dataset/
+notebooks/
+
+# Data files (should be uploaded via API)
+
+_.csv
+_.xlsx
+_.json
+_.pkl
+\*.joblib
+
+# Docker
+
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Environment
+
+.env
+.env.local
+.env.\*.local

@@ -9,7 +9,10 @@ interface Warning {
     severity: string;
     impact: string;
     columns?: string[];
-    details?: string[];
+    details?: string[] | Record<string, any>;
+    recommended_strategy?: string;
+    strategy_reason?: string;
+    available_strategies?: Record<string, string>;
 }
 
 interface Recommendation {
@@ -41,6 +44,11 @@ function Home() {
     const [warnings, setWarnings] = useState<Warning[]>([]);
     const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
     const [transformationApplied, setTransformationApplied] = useState<{type: string, threshold?: number} | null>(null);
+    const [imbalanceStrategy, setImbalanceStrategy] = useState<string>("");
+    const [strategyConfirmed, setStrategyConfirmed] = useState(false);
+    const [settingTarget, setSettingTarget] = useState(false);
+    const [settingModel, setSettingModel] = useState(false);
+    const [applyingTransformation, setApplyingTransformation] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
 
@@ -56,10 +64,24 @@ function Home() {
     };
 
     const handleUpload = async () => {
+        // Prevent double-click submissions
+        if (uploading || uploadConfirmed) {
+            return;
+        }
+        
         if (!file) {
             setError("Please select a CSV file.");
             return;
         }
+        
+        // Client-side file size validation (500MB limit)
+        const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+        if (file.size > MAX_FILE_SIZE) {
+            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+            setError(`File too large (${fileSizeMB}MB). Maximum size is 500MB. Please reduce your dataset size.`);
+            return;
+        }
+        
         setUploading(true);
         setError("");
         try {
@@ -73,14 +95,20 @@ function Home() {
             setColumns(response.data.columns);
             setSessionId(response.data.session_id);
             setUploadConfirmed(true);
-        } catch (err) {
-            setError("Upload failed.");
+        } catch (err: any) {
+            const errorMsg = err?.response?.data?.detail || "Upload failed. Please try again.";
+            setError(errorMsg);
         } finally {
             setUploading(false);
         }
     };
 
     const handleSetTargetColumn = async () => {
+        // Prevent double-click submissions
+        if (settingTarget || targetConfirmed) {
+            return;
+        }
+        
         if (!sessionId) {
             setError("Session ID missing. Please upload a dataset first.");
             return;
@@ -89,6 +117,10 @@ function Home() {
             setError("Please select a target column.");
             return;
         }
+        
+        setSettingTarget(true);
+        setError("");
+        
         try {
             const formData = new FormData();
             formData.append("session_id", sessionId);
@@ -105,20 +137,37 @@ function Home() {
             // Store warnings and recommendations
             if (response.data.warnings) {
                 setWarnings(response.data.warnings);
+                
+                // Auto-select recommended strategy for imbalance if detected
+                const imbalanceWarning = response.data.warnings.find((w: Warning) => w.type === 'severe_imbalance');
+                if (imbalanceWarning && imbalanceWarning.recommended_strategy) {
+                    setImbalanceStrategy(imbalanceWarning.recommended_strategy);
+                }
             }
             if (response.data.recommendations) {
                 setRecommendations(response.data.recommendations);
             }
-        } catch (err) {
-            setError("Failed to set target column.");
+        } catch (err: any) {
+            const errorMsg = err?.response?.data?.detail || "Failed to set target column.";
+            setError(errorMsg);
+        } finally {
+            setSettingTarget(false);
         }
     };
 
     const handleApplyTransformation = async (recommendation: Recommendation) => {
+        // Prevent double-click submissions
+        if (applyingTransformation) {
+            return;
+        }
+        
         if (!sessionId) {
             setError("Session ID missing.");
             return;
         }
+        
+        setApplyingTransformation(true);
+        setError("");
         
         try {
             const formData = new FormData();
@@ -145,10 +194,57 @@ function Home() {
             
         } catch (err) {
             setError("Failed to store transformation.");
+        } finally {
+            setApplyingTransformation(false);
+        }
+    };
+
+    const handleSelectImbalanceStrategy = (strategy: string) => {
+        // Just update the UI selection, don't call API yet
+        // User can change their mind multiple times
+        setImbalanceStrategy(strategy);
+        setError("");
+    };
+
+    const handleConfirmImbalanceStrategy = async () => {
+        // Prevent double-click submissions
+        if (strategyConfirmed) {
+            return;
+        }
+        
+        if (!sessionId) {
+            setError("Session ID missing.");
+            return;
+        }
+        
+        if (!imbalanceStrategy) {
+            setError("Please select an imbalance handling strategy.");
+            return;
+        }
+        
+        try {
+            const formData = new FormData();
+            formData.append("session_id", sessionId);
+            formData.append("strategy", imbalanceStrategy);
+            
+            await api.post("/imbalance-strategy", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+            
+            setStrategyConfirmed(true);
+            
+        } catch (err: any) {
+            const errorMsg = err?.response?.data?.detail || "Failed to set imbalance strategy.";
+            setError(errorMsg);
         }
     };
 
     const handleSetModel = async () => {
+        // Prevent double-click submissions
+        if (settingModel || modelConfirmed) {
+            return;
+        }
+        
         if (!sessionId) {
             setError("Session ID missing. Please upload a dataset first.");
             return;
@@ -157,6 +253,10 @@ function Home() {
             setError("Please select a model.");
             return;
         }
+        
+        setSettingModel(true);
+        setError("");
+        
         try {
             const formData = new FormData();
             formData.append("session_id", sessionId);
@@ -168,8 +268,11 @@ function Home() {
             setTimeout(() => {
                 navigate(`/column-review/${sessionId}`);
             }, 1000);
-        } catch (err) {
-            setError("Failed to set model.");
+        } catch (err: any) {
+            const errorMsg = err?.response?.data?.detail || "Failed to set model.";
+            setError(errorMsg);
+        } finally {
+            setSettingModel(false);
         }
     };
 
@@ -236,11 +339,11 @@ function Home() {
                             <div className="text-blue-300 text-sm mt-4">Selected target: <span className="font-mono">{targetColumn}</span></div>
                         )}
                         <button
-                            className={`mt-4 bg-gradient-to-r from-blue-700 to-blue-500 px-5 py-2 text-lg text-white rounded-lg shadow hover:from-blue-600 hover:to-blue-400 font-bold transition ${(!targetColumn || targetConfirmed) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            className={`mt-4 bg-gradient-to-r from-blue-700 to-blue-500 px-5 py-2 text-lg text-white rounded-lg shadow hover:from-blue-600 hover:to-blue-400 font-bold transition ${(!targetColumn || targetConfirmed || settingTarget) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                             onClick={handleSetTargetColumn}
-                            disabled={!targetColumn || targetConfirmed}
+                            disabled={!targetColumn || targetConfirmed || settingTarget}
                         >
-                            Set Target Column
+                            {settingTarget ? "Setting Target..." : "Set Target Column"}
                         </button>
                     </div>
                 )}
@@ -323,6 +426,106 @@ function Home() {
                     </div>
                 )}
 
+                {/* Imbalance Strategy Selection */}
+                {warnings.some(w => w.type === 'severe_imbalance') && targetConfirmed && !modelConfirmed && (
+                    <div className="mt-6 p-5 bg-purple-900/30 border-2 border-purple-600 rounded-xl shadow animate-fade-in">
+                        <h3 className="text-xl font-bold text-purple-300 mb-3 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                            ⚖️ How to Handle Class Imbalance?
+                        </h3>
+                        
+                        {(() => {
+                            const imbalanceWarning = warnings.find(w => w.type === 'severe_imbalance');
+                            const recommendedStrategy = imbalanceWarning?.recommended_strategy || 'class_weights';
+                            const strategyReason = imbalanceWarning?.strategy_reason || '';
+                            const availableStrategies = imbalanceWarning?.available_strategies || {};
+                            
+                            return (
+                                <>
+                                    <p className="text-purple-100 text-sm mb-4">
+                                        Choose how to handle the imbalanced classes. 
+                                        {strategyReason && (
+                                            <span className="block mt-1 text-green-300">
+                                                ✨ Recommended: <strong>{recommendedStrategy.replace('_', ' ').toUpperCase()}</strong> - {strategyReason}
+                                            </span>
+                                        )}
+                                    </p>
+                                    
+                                    <div className="space-y-2">
+                                        {Object.entries(availableStrategies).map(([key, description]) => (
+                                            <button
+                                                key={key}
+                                                onClick={() => handleSelectImbalanceStrategy(key)}
+                                                className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                                                    imbalanceStrategy === key
+                                                        ? 'bg-purple-700 border-purple-500 shadow-lg'
+                                                        : key === recommendedStrategy
+                                                        ? 'bg-purple-900/50 border-purple-600 hover:bg-purple-800'
+                                                        : 'bg-black/50 border-purple-800 hover:bg-purple-950'
+                                                } cursor-pointer`}
+                                            >
+                                                <div className="flex items-start gap-2">
+                                                    <div className={`mt-1 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                                        imbalanceStrategy === key
+                                                            ? 'border-purple-300 bg-purple-300'
+                                                            : 'border-purple-500'
+                                                    }`}>
+                                                        {imbalanceStrategy === key && (
+                                                            <svg className="w-3 h-3 text-purple-900" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-purple-100 font-semibold">
+                                                                {key.replace('_', ' ').toUpperCase()}
+                                                            </span>
+                                                            {key === recommendedStrategy && (
+                                                                <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">
+                                                                    RECOMMENDED
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-purple-200 text-xs mt-1">{description}</p>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    
+                                    {!strategyConfirmed && imbalanceStrategy && (
+                                        <>
+                                            <button
+                                                onClick={handleConfirmImbalanceStrategy}
+                                                className="mt-4 w-full bg-gradient-to-r from-purple-700 to-purple-500 px-5 py-2 text-lg text-white rounded-lg shadow hover:from-purple-600 hover:to-purple-400 font-bold transition cursor-pointer"
+                                            >
+                                                Confirm Strategy: {imbalanceStrategy.replace('_', ' ').toUpperCase()}
+                                            </button>
+                                            <p className="mt-2 text-purple-300 text-xs text-center">
+                                                💡 You can change your selection anytime before confirming
+                                            </p>
+                                        </>
+                                    )}
+                                    
+                                    {strategyConfirmed && (
+                                        <div className="mt-4 p-3 bg-green-900/50 border border-green-600 rounded-lg">
+                                            <p className="text-green-200 text-sm font-semibold flex items-center gap-2">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                Strategy confirmed! The notebook will handle imbalance using: {imbalanceStrategy.replace('_', ' ')}
+                                            </p>
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
+                    </div>
+                )}
+
                 {/* Recommendations Section */}
                 {recommendations.length > 0 && (
                     <div className="mt-6 p-5 bg-blue-900/30 border-2 border-blue-600 rounded-xl shadow animate-fade-in">
@@ -378,13 +581,14 @@ function Home() {
                                 {/* Apply Transformation Button */}
                                 {rec.type === 'binary_transformation' && (
                                     <button
-                                        className="mt-4 w-full bg-gradient-to-r from-green-600 to-green-500 px-4 py-3 text-base text-white rounded-lg shadow-lg hover:from-green-500 hover:to-green-400 font-bold transition flex items-center justify-center gap-2"
+                                        className={`mt-4 w-full bg-gradient-to-r from-green-600 to-green-500 px-4 py-3 text-base text-white rounded-lg shadow-lg font-bold transition flex items-center justify-center gap-2 ${applyingTransformation ? 'opacity-50 cursor-not-allowed' : 'hover:from-green-500 hover:to-green-400'}`}
                                         onClick={() => handleApplyTransformation(rec)}
+                                        disabled={applyingTransformation}
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                         </svg>
-                                        Apply Binary Transformation
+                                        {applyingTransformation ? "Applying..." : "Apply Binary Transformation"}
                                     </button>
                                 )}
                             </div>
@@ -435,7 +639,20 @@ function Home() {
                 {targetConfirmed && availableModels.length > 0 && (
                     <div className="mt-8 p-6 bg-black/70 border border-blue-800 rounded-xl shadow flex flex-col gap-4 animate-fade-in">
                         <label className="block text-white text-lg font-semibold mb-2">Select a Machine Learning Model</label>
-                        <div className="flex flex-wrap gap-4">
+                        
+                        {/* Show message if imbalance strategy needs confirmation */}
+                        {warnings.some(w => w.type === 'severe_imbalance') && !strategyConfirmed && (
+                            <div className="p-3 bg-yellow-900/30 border border-yellow-600 rounded-lg">
+                                <p className="text-yellow-200 text-sm flex items-center gap-2">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    Please confirm your imbalance handling strategy above before selecting a model
+                                </p>
+                            </div>
+                        )}
+                        
+                        <div className={`flex flex-wrap gap-4 ${warnings.some(w => w.type === 'severe_imbalance') && !strategyConfirmed ? 'opacity-50 pointer-events-none' : ''}`}>
                             {availableModels.map((model) => (
                                 <button
                                     key={model}
@@ -456,11 +673,11 @@ function Home() {
                             <div className="text-blue-300 text-sm mt-4">Selected model: <span className="font-mono">{selectedModel}</span></div>
                         )}
                         <button
-                            className={`mt-4 bg-gradient-to-r from-blue-700 to-blue-500 px-5 py-2 text-lg text-white rounded-lg shadow hover:from-blue-600 hover:to-blue-400 font-bold transition ${(!selectedModel || modelConfirmed) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            className={`mt-4 bg-gradient-to-r from-blue-700 to-blue-500 px-5 py-2 text-lg text-white rounded-lg shadow hover:from-blue-600 hover:to-blue-400 font-bold transition ${(!selectedModel || modelConfirmed || settingModel) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                             onClick={handleSetModel}
-                            disabled={!selectedModel || modelConfirmed}
+                            disabled={!selectedModel || modelConfirmed || settingModel}
                         >
-                            Set Model
+                            {settingModel ? "Setting Model..." : "Set Model"}
                         </button>
                         {modelConfirmed && (
                             <div className="text-green-400 text-sm mt-4">Model set successfully!</div>

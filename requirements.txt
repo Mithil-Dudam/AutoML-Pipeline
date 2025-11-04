@@ -8,3 +8,7 @@ ipykernel
 numpy
 scikit-learn
 langchain-ollama
+redis
+slowapi
+chardet
+python-dotenv

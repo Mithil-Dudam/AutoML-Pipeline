@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 
 function Results() {
     const { sessionId } = useParams<{ sessionId: string }>();
-    const [results, setResults] = useState<Array<{ cell: number; result: string | null }>>([]);
+    const navigate = useNavigate();
+    const [results, setResults] = useState<Array<{ cell: number; result: string | null; title?: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [initializing, setInitializing] = useState(true);
     const [error, setError] = useState("");
@@ -23,60 +24,85 @@ function Results() {
             return;
         }
         
+        // Validate session exists before starting training
+        const validateSession = async () => {
+            try {
+                const response = await fetch(`http://localhost:8000/column-info/${sessionId}`);
+                if (!response.ok) {
+                    setError("Session expired (2 hours). Please start over.");
+                    setInitializing(false);
+                    setLoading(false);
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                setError("Session expired or invalid. Please start over.");
+                setInitializing(false);
+                setLoading(false);
+                return false;
+            }
+        };
+        
         let eventSource: EventSource | null = null;
         setResults([]);
         setLoading(true);
         setError("");
-        try {
-            eventSource = new EventSource(`http://localhost:8000/generate/notebook?session_id=${sessionId}`);
-            eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    setResults((prev) => [...prev, { cell: data.cell, result: data.result }]);
-                    // Hide initializing spinner once first result arrives
-                    if (initializing) {
-                        setInitializing(false);
+        
+        validateSession().then(isValid => {
+            if (!isValid) return;
+            
+            try {
+                eventSource = new EventSource(`http://localhost:8000/generate/notebook?session_id=${sessionId}`);
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        setResults((prev) => [...prev, { cell: data.cell, result: data.result, title: data.title }]);
+                        // Hide initializing spinner once first result arrives
+                        if (initializing) {
+                            setInitializing(false);
+                        }
+                    } catch (e) {
+                        setResults((prev) => [...prev, { cell: results.length + 1, result: event.data, title: undefined }]);
+                        if (initializing) {
+                            setInitializing(false);
+                        }
                     }
-                } catch (e) {
-                    setResults((prev) => [...prev, { cell: results.length + 1, result: event.data }]);
-                    if (initializing) {
-                        setInitializing(false);
-                    }
-                }
-            };
-            eventSource.onerror = () => {
+                };
+                eventSource.onerror = () => {
+                    setLoading(false);
+                    eventSource && eventSource.close();
+                    
+                    // Fetch the actual input columns needed for prediction (after preprocessing)
+                    fetch(`http://localhost:8000/input-columns/${sessionId}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.input_columns) {
+                                setColumns(data.input_columns);
+                            }
+                        })
+                        .catch(err => {
+                            console.error("Failed to fetch input columns:", err);
+                        });
+                    
+                    // Fetch categorical values for dropdowns
+                    fetch(`http://localhost:8000/categorical-values/${sessionId}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.categorical_values) {
+                                setCategoricalValues(data.categorical_values);
+                            }
+                        })
+                        .catch(err => {
+                            console.error("Failed to fetch categorical values:", err);
+                        });
+                };
+                eventSource.onopen = () => setLoading(false);
+            } catch (err) {
+                setError("Failed to fetch notebook results.");
                 setLoading(false);
-                eventSource && eventSource.close();
-                
-                // Fetch the actual input columns needed for prediction (after preprocessing)
-                fetch(`http://localhost:8000/input-columns/${sessionId}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.input_columns) {
-                            setColumns(data.input_columns);
-                        }
-                    })
-                    .catch(err => {
-                        console.error("Failed to fetch input columns:", err);
-                    });
-                
-                // Fetch categorical values for dropdowns
-                fetch(`http://localhost:8000/categorical-values/${sessionId}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.categorical_values) {
-                            setCategoricalValues(data.categorical_values);
-                        }
-                    })
-                    .catch(err => {
-                        console.error("Failed to fetch categorical values:", err);
-                    });
-            };
-            eventSource.onopen = () => setLoading(false);
-        } catch (err) {
-            setError("Failed to fetch notebook results.");
-            setLoading(false);
-        }
+            }
+        });
+        
         return () => {
             if (eventSource) eventSource.close();
         };
@@ -90,25 +116,48 @@ function Results() {
     }, [reportEventSource]);
 
     const cellTitles = [
-        "First 5 Rows of Dataset",
-        "Dataset Info",
-        "Summary Statistics",
-        "Target Column Distribution",
-        "Missing Values Check",
-        "Missing Value Imputation",
-        "Feature Engineering",
-        "Train-Test Split",
-        "K-Fold Cross-Validation",
-        "Final Model Training and Evaluation"
+        "First 5 Rows of Dataset",                      // Cell 4 (index 0)
+        "Binary Transformation",                          // Cell 5 (index 1)
+        "Dataset Info",                                   // Cell 6 (index 2)
+        "Summary Statistics",                             // Cell 7 (index 3)
+        "Missing Values Check",                           // Cell 8 (index 4)
+        "Missing Value Imputation",                       // Cell 9 (index 5)
+        "Data Preparation",                               // Cell 10 (index 6)
+        "Train-Test Split (Before Feature Engineering)", // Cell 11 (index 7)
+        "Feature Engineering (No Data Leakage)",          // Cell 12 (index 8)
+        "Class Imbalance Handling",                       // Cell 13 (index 9)
+        "K-Fold Cross-Validation",                        // Cell 14 (index 10)
+        "Final Model Training and Evaluation",            // Cell 15 (index 11)
+        "Model Summary"                                    // Cell 16 (index 12, if exists)
     ];
+
+    // Check if we have any visible results (cell > 3)
+    const hasVisibleResults = results.some(res => res.cell > 3);
 
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-blue-950 flex flex-col items-center justify-center px-4 font-sans">
+            {/* Start Over Button - Only show when VISIBLE results have started appearing (cell > 3) */}
+            {hasVisibleResults && (
+                <div className="w-full max-w-4xl relative">
+                    <div className="absolute top-2 right-0">
+                        <button
+                            onClick={() => navigate("/")}
+                            className="px-6 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 hover:border-gray-500 rounded-lg text-gray-300 hover:text-white font-medium transition-all duration-300 flex items-center gap-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                            Start Over
+                        </button>
+                    </div>
+                </div>
+            )}
             <h1 className="text-4xl font-extrabold text-white drop-shadow-lg tracking-tight mb-8 mt-10 text-center">
                 <span className="border-b-4 border-blue-600 pb-2 px-4 rounded">Notebook Results</span>
             </h1>
             <div className="w-full max-w-4xl flex flex-col gap-8 animate-fade-in">
-                {initializing && (
+                {/* Loading spinner - Only show when no VISIBLE results yet (cell > 3) */}
+                {!hasVisibleResults && !error && (
                     <div className="bg-black/70 border border-blue-800 rounded-xl p-8 shadow-2xl flex flex-col items-center justify-center gap-4">
                         <svg className="animate-spin h-12 w-12 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -125,7 +174,7 @@ function Results() {
                     const isHtml = res.result && htmlTagPattern.test(res.result.trim());
                     return (
                         <div key={idx} className="bg-black/80 border border-blue-900 rounded-2xl shadow-2xl p-8 w-full flex flex-col gap-4">
-                            <div className="text-blue-200 text-lg font-semibold mb-2">{cellTitles[res.cell - 4] || `Cell ${res.cell}`}</div>
+                            <div className="text-blue-200 text-lg font-semibold mb-2">{res.title || cellTitles[res.cell - 4] || `Cell ${res.cell}`}</div>
                             <div className="bg-gray-900 rounded-lg p-6 overflow-x-auto w-full">
                                 <style>{`
                                     .notebook-result-table {
@@ -178,7 +227,7 @@ function Results() {
                                             // Start report generation
                                             await fetch(`http://localhost:8000/generate/report/${sessionId}`);
                                             
-                                            // Use Server-Sent Events for real-time updates (more efficient than polling)
+                                            // Use Server-Sent Events for real-time updates 
                                             const eventSource = new EventSource(`http://localhost:8000/report/stream/${sessionId}`);
                                             setReportEventSource(eventSource);
                                             
@@ -240,12 +289,11 @@ function Results() {
                                         {aiReport.split('\n').map((line, idx) => {
                                             const trimmed = line.trim();
                                             
-                                            // Empty line - add spacing
                                             if (!trimmed) {
                                                 return <div key={idx} className="h-6" />;
                                             }
                                             
-                                            // Heading (line that ends with just ** on both sides or is bold standalone)
+                                            // Heading 
                                             if (/^\*\*[^*]+\*\*$/.test(trimmed)) {
                                                 const headingText = trimmed.replace(/\*\*/g, '');
                                                 return (
@@ -381,9 +429,30 @@ function Results() {
                                             body: JSON.stringify(testInputs)
                                         });
                                         const data = await response.json();
-                                        setPrediction(data);
+                                        
+                                        // Check if response is an error
+                                        if (!response.ok) {
+                                            // Handle structured error response
+                                            if (data.detail) {
+                                                if (typeof data.detail === 'object' && data.detail.errors) {
+                                                    // Validation errors
+                                                    setPrediction({ 
+                                                        error: `${data.detail.message || 'Validation failed'}:\n${data.detail.errors.join('\n')}` 
+                                                    });
+                                                } else if (typeof data.detail === 'string') {
+                                                    // Simple string error
+                                                    setPrediction({ error: data.detail });
+                                                } else {
+                                                    setPrediction({ error: data.detail.message || "Prediction failed" });
+                                                }
+                                            } else {
+                                                setPrediction({ error: data.message || "Prediction failed. Please try again." });
+                                            }
+                                        } else {
+                                            setPrediction(data);
+                                        }
                                     } catch (err) {
-                                        setPrediction({ error: "Prediction failed. Please try again." });
+                                        setPrediction({ error: "Prediction failed. Please check your inputs and try again." });
                                     } finally {
                                         setPredicting(false);
                                     }
@@ -401,7 +470,22 @@ function Results() {
                             {prediction && (
                                 <div className={`mt-4 p-6 rounded-lg ${prediction.error ? "bg-red-900/30 border border-red-700" : "bg-green-900/30 border border-green-700"}`}>
                                     {prediction.error ? (
-                                        <p className="text-red-300 font-semibold">{prediction.error}</p>
+                                        <div>
+                                            <div className="flex items-start gap-3 mb-2">
+                                                <svg className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <div>
+                                                    <p className="text-red-300 font-semibold text-lg mb-2">❌ Prediction Failed</p>
+                                                    <pre className="text-red-200 text-sm whitespace-pre-wrap font-mono bg-red-950/30 p-3 rounded border border-red-800/50">
+                                                        {prediction.error}
+                                                    </pre>
+                                                </div>
+                                            </div>
+                                            <p className="text-red-200 text-sm mt-3">
+                                                💡 <strong>Tip:</strong> Check that numeric values don't contain letters or special characters
+                                            </p>
+                                        </div>
                                     ) : (
                                         <>
                                             <div className="text-green-200 text-lg font-bold mb-2">

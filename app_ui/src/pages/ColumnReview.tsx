@@ -18,11 +18,16 @@ const ColumnReview = () => {
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    const abortController = new AbortController();
+    
     const fetchColumns = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/column-info/${sessionId}`);
+        const response = await axios.get(`http://localhost:8000/column-info/${sessionId}`, {
+          signal: abortController.signal
+        });
         const columnData: ColumnInfo[] = response.data.columns;
         setColumns(columnData);
         
@@ -32,13 +37,21 @@ const ColumnReview = () => {
         );
         setSelectedColumns(initialSelected);
         setLoading(false);
-      } catch (err) {
-        setError("Failed to load column information");
-        setLoading(false);
+      } catch (err: any) {
+        // Don't set error if request was aborted (happens in StrictMode)
+        if (err.name !== 'CanceledError' && !abortController.signal.aborted) {
+          setError("Failed to load column information");
+          setLoading(false);
+        }
       }
     };
 
     fetchColumns();
+    
+    // Cleanup function: abort the request if component unmounts or effect re-runs
+    return () => {
+      abortController.abort();
+    };
   }, [sessionId]);
 
   const toggleColumn = (columnName: string) => {
@@ -52,6 +65,14 @@ const ColumnReview = () => {
   };
 
   const handleContinue = async () => {
+    // Prevent double-click submissions
+    if (isSubmitting) {
+      return;
+    }
+    
+    setIsSubmitting(true);
+    setError(null);
+    
     try {
       // Get list of columns to exclude (those NOT selected)
       const allColumnNames = columns.map(col => col.name);
@@ -68,6 +89,7 @@ const ColumnReview = () => {
       navigate(`/results/${sessionId}`);
     } catch (err) {
       setError("Failed to save column selections");
+      setIsSubmitting(false); // Re-enable button on error
     }
   };
 
@@ -99,7 +121,19 @@ const ColumnReview = () => {
   <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-blue-950 p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header with animated gradient */}
-        <div className="mb-10 text-center">
+        <div className="mb-10 text-center relative">
+          {/* Start Over Button */}
+          <div className="absolute top-0 right-0">
+            <button
+              onClick={() => navigate("/")}
+              className="px-6 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 hover:border-gray-500 rounded-lg text-gray-300 hover:text-white font-medium transition-all duration-300 flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              Start Over
+            </button>
+          </div>
           <div className="inline-block mb-5">
             <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-5 rounded-2xl shadow-2xl shadow-cyan-500/40 border border-cyan-500/30">
               <svg className="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,14 +167,14 @@ const ColumnReview = () => {
             </div>
             <button
               onClick={handleContinue}
-              disabled={selectedCount === 0}
+              disabled={selectedCount === 0 || isSubmitting}
               className={`group px-8 py-4 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2 ${
-                selectedCount === 0
+                selectedCount === 0 || isSubmitting
                   ? "bg-gray-700 text-gray-500 cursor-not-allowed"
                   : "bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:shadow-2xl hover:shadow-cyan-500/50 hover:scale-105 border border-cyan-500/30"
               }`}
             >
-              Continue to Training
+              {isSubmitting ? "Starting Training..." : "Continue to Training"}
               <svg className={`w-5 h-5 transition-transform ${selectedCount > 0 ? 'group-hover:translate-x-1' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
