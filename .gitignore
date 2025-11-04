@@ -122,3 +122,6 @@ artifacts/
 
 # Ignore generated notebooks
 ml_notebook_*.ipynb
+
+# Environment variables
+.env
